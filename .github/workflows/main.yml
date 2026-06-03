@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  docker-compose-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Validate Docker Compose
+        run: docker compose config
+
+      - name: Start services
+        run: docker compose up -d
+
+      - name: Wait for API
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://localhost:5001/ > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "API did not start in time";
+          docker compose ps;
+          exit 1
+
+      - name: Test endpoints
+        run: |
+          curl -fsS http://localhost:5001/
+          curl -fsS -X POST http://localhost:5001/todos \
+            -H "Content-Type: application/json" \
+            -d '{"title":"CI task"}'
+          curl -fsS http://localhost:5001/todos
+
+      - name: Stop services
+        if: always()
+        run: docker compose down -v
